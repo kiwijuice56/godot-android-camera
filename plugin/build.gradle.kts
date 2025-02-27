@@ -5,11 +5,9 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-// TODO: Update value to your plugin's name.
-val pluginName = "GodotAndroidPluginTemplate"
+val pluginName = "GodotAndroidCamera"
 
-// TODO: Update value to match your plugin's package name.
-val pluginPackageName = "org.godotengine.plugin.android.template"
+val pluginPackageName = "org.godotengine.plugin.android.camera"
 
 android {
     namespace = pluginPackageName
