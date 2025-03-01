@@ -1,20 +1,21 @@
 @tool
 extends EditorPlugin
 
-# A class member to hold the editor export plugin during its lifecycle.
-var export_plugin : AndroidExportPlugin
+var export_plugin: AndroidExportPlugin
 
-func _enter_tree():
-	# Initialization of the plugin goes here.
+func _enter_tree() -> void:
 	export_plugin = AndroidExportPlugin.new()
 	add_export_plugin(export_plugin)
 
+	export_plugin.connect("on_video_recorded", _on_video_recorded)
 
-func _exit_tree():
+func _exit_tree() -> void:
 	# Clean-up of the plugin goes here.
 	remove_export_plugin(export_plugin)
 	export_plugin = null
 
+func _on_video_recorded(video_path: String) -> void:
+	print("Video saved at: ", video_path)
 
 class AndroidExportPlugin extends EditorExportPlugin:
 	var _plugin_name = "GodotAndroidCamera"

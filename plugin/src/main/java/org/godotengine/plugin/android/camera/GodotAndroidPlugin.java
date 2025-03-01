@@ -1,58 +1,192 @@
+// For transparency:
+// Most of this code was generated with ChatGPT --
+// Needs further testing
+
 package org.godotengine.plugin.android.camera;
 
-import android.app.Activity;
-import android.content.Intent;
-import android.graphics.Bitmap;
-import android.provider.MediaStore;
+import android.graphics.ImageFormat;
+import android.graphics.SurfaceTexture;
+import android.hardware.Camera;
+import android.os.Handler;
+import android.os.HandlerThread;
 import android.util.Log;
+
+import androidx.annotation.NonNull;
 
 import org.godotengine.godot.Godot;
 import org.godotengine.godot.plugin.GodotPlugin;
+import org.godotengine.godot.plugin.SignalInfo;
 import org.godotengine.godot.plugin.UsedByGodot;
 
-import android.content.pm.PackageManager;
-import android.Manifest;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
-
+import java.io.IOException;
+import java.util.Collections;
 import java.util.Set;
 
 public class GodotAndroidPlugin extends GodotPlugin {
-    private static final int CAMERA_REQUEST = 1001;
-    private static final int CAMERA_PERMISSION_REQUEST = 1002;
+    private Camera camera;
+    private HandlerThread cameraThread;
+    private Handler cameraHandler;
+    private SurfaceTexture surfaceTexture;
 
-    private Activity activity;
+    private final int CAMERA_WIDTH = 512;
+    private final int CAMERA_HEIGHT = 512;
+
+    // in milliseconds (50 ms ~= 20 fps)
+    private final int CAPTURE_INTERVAL = 50;
+
+    private byte[] previewBuffer;
+    private volatile boolean isRunning = false;
 
     public GodotAndroidPlugin(Godot godot) {
         super(godot);
-        this.activity = godot.getActivity();
     }
 
-    @UsedByGodot
-    public void openCamera() {
-        Intent cameraIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-        if (cameraIntent.resolveActivity(activity.getPackageManager()) != null) {
-            activity.startActivityForResult(cameraIntent, CAMERA_REQUEST);
-        }
-    }
-
-    @UsedByGodot
-    public boolean requestCameraPermissions() {
-        if (ContextCompat.checkSelfPermission(activity, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(activity, new String[]{Manifest.permission.CAMERA}, CAMERA_PERMISSION_REQUEST);
-        }
-        boolean granted = ContextCompat.checkSelfPermission(activity, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED;
-        return granted;
-    }
-
-    @UsedByGodot
-    public boolean isCameraAvailable() {
-        Intent cameraIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-        return cameraIntent.resolveActivity(activity.getPackageManager()) != null;
-    }
-
+    @NonNull
     @Override
     public String getPluginName() {
         return "GodotAndroidCamera";
+    }
+
+    @NonNull
+    @Override
+    public Set<SignalInfo> getPluginSignals() {
+        return Collections.singleton(
+                new SignalInfo("on_camera_frame", byte[].class, Integer.class, Integer.class)
+        );
+    }
+
+    @UsedByGodot
+    public void startCamera() {
+        if (isRunning) {
+            Log.w(getPluginName(), "Camera already started.");
+            return;
+        }
+        isRunning = true;
+
+        cameraThread = new HandlerThread("CameraThread");
+        cameraThread.start();
+        cameraHandler = new Handler(cameraThread.getLooper());
+
+        cameraHandler.post(() -> {
+            try {
+                camera = Camera.open();
+                Camera.Parameters params = camera.getParameters();
+
+                Camera.Size size = getBestPreviewSize(params, CAMERA_WIDTH, CAMERA_HEIGHT);
+                params.setPreviewSize(size.width, size.height);
+                params.setPreviewFormat(ImageFormat.NV21);
+                camera.setParameters(params);
+
+                int bufferSize = size.width * size.height *
+                        ImageFormat.getBitsPerPixel(ImageFormat.NV21) / 8;
+                previewBuffer = new byte[bufferSize];
+
+                surfaceTexture = new SurfaceTexture(10); // Texture id can be arbitrary
+                camera.setPreviewTexture(surfaceTexture);
+                camera.addCallbackBuffer(previewBuffer);
+                camera.setPreviewCallbackWithBuffer(previewCallback);
+                camera.startPreview();
+
+                Log.i(getPluginName(), "Camera preview started successfully on SurfaceTexture");
+            } catch (IOException e) {
+                Log.e(getPluginName(), "Couldn't start camera. " + e.getMessage());
+                isRunning = false;
+            } catch (Exception e) {
+                Log.e(getPluginName(), "General error starting camera: ", e);
+                isRunning = false;
+            }
+        });
+    }
+
+    @UsedByGodot
+    public void stopCamera() {
+        if (!isRunning) {
+            Log.w(getPluginName(), "Camera already stopped.");
+            return;
+        }
+        isRunning = false;
+        cameraHandler.post(() -> {
+            if(camera!=null){
+                camera.setPreviewCallbackWithBuffer(null);
+                camera.stopPreview();
+                camera.release();
+                camera = null;
+            }
+            if(surfaceTexture != null){
+                surfaceTexture.release();
+                surfaceTexture = null;
+            }
+            cameraThread.quitSafely();
+        });
+    }
+
+    private Camera.Size getBestPreviewSize(Camera.Parameters params, int width, int height) {
+        Camera.Size bestSize = params.getSupportedPreviewSizes().get(0);
+        int diff = Integer.MAX_VALUE;
+        for (Camera.Size size : params.getSupportedPreviewSizes()) {
+            int new_diff = Math.abs(size.width - width) + Math.abs(size.height - height);
+            if (new_diff < diff) {
+                bestSize = size;
+                diff = new_diff;
+            }
+        }
+        return bestSize;
+    }
+
+    private final Camera.PreviewCallback previewCallback = new Camera.PreviewCallback() {
+        long lastFrameTime = 0;
+        @Override
+        public void onPreviewFrame(byte[] data, Camera camera) {
+            long t = System.currentTimeMillis();
+            if (t - lastFrameTime >= CAPTURE_INTERVAL && isRunning) {
+                Camera.Size size = camera.getParameters().getPreviewSize();
+                byte[] frameData = data.clone();
+                // Send frame data back to godot
+                emitSignal("on_camera_frame", yuv2rgb(frameData, size.width, size.height),
+                        size.width, size.height);
+                lastFrameTime = t;
+            }
+            if(isRunning){
+                camera.addCallbackBuffer(previewBuffer);
+            }
+        }
+    };
+
+    // Modified from https://github.com/yushulx/NV21-to-RGB
+    // Converts an image from YUV to RGB_888 as a byte array
+    public static byte[] yuv2rgb(byte[] yuv, int width, int height) {
+        int total = width * height;
+        byte[] rgb = new byte[total * 3];
+        int Y, Cb = 0, Cr = 0, index = 0;
+        int R, G, B;
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                Y = yuv[y * width + x];
+                if (Y < 0) Y += 255;
+
+                if ((x & 1) == 0) {
+                    Cr = yuv[(y >> 1) * (width) + x + total];
+                    Cb = yuv[(y >> 1) * (width) + x + total + 1];
+
+                    if (Cb < 0) Cb += 127; else Cb -= 128;
+                    if (Cr < 0) Cr += 127; else Cr -= 128;
+                }
+
+                R = Y + Cr + (Cr >> 2) + (Cr >> 3) + (Cr >> 5);
+                G = Y - (Cb >> 2) + (Cb >> 4) + (Cb >> 5) - (Cr >> 1) + (Cr >> 3) + (Cr >> 4) + (Cr >> 5);
+                B = Y + Cb + (Cb >> 1) + (Cb >> 2) + (Cb >> 6);
+
+                if (R < 0) R = 0; else if (R > 255) R = 255;
+                if (G < 0) G = 0; else if (G > 255) G = 255;
+                if (B < 0) B = 0; else if (B > 255) B = 255;
+
+                rgb[index++] = (byte) R;
+                rgb[index++] = (byte) G;
+                rgb[index++] = (byte) B;
+            }
+        }
+
+        return rgb;
     }
 }

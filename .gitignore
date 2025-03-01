@@ -31,3 +31,8 @@ google-services.json
 
 # Android Profiling
 *.hprof
+
+# Godot
+godot-project/android/
+godot-project/addons/
+godot-project/.godot/
