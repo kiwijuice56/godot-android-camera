@@ -1,6 +1,9 @@
-[gd_scene load_steps=2 format=3 uid="uid://coun7joy8o2i2"]
+[gd_scene load_steps=3 format=3 uid="uid://coun7joy8o2i2"]
 
 [ext_resource type="Script" uid="uid://cwbp5gws1d5c4" path="res://main.gd" id="1_ig7tw"]
+
+[sub_resource type="Theme" id="Theme_ig7tw"]
+default_font_size = 32
 
 [node name="Main" type="Node"]
 script = ExtResource("1_ig7tw")
@@ -9,9 +12,12 @@ script = ExtResource("1_ig7tw")
 
 [node name="Canvas" type="TextureRect" parent="CanvasLayer"]
 unique_name_in_owner = true
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
+texture_filter = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
 grow_horizontal = 2
 grow_vertical = 2
 
@@ -21,18 +27,22 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/margin_left = 8
-theme_override_constants/margin_top = 8
-theme_override_constants/margin_right = 8
-theme_override_constants/margin_bottom = 8
+theme = SubResource("Theme_ig7tw")
+theme_override_constants/margin_left = 32
+theme_override_constants/margin_top = 32
+theme_override_constants/margin_right = 32
+theme_override_constants/margin_bottom = 32
 
 [node name="VBoxContainer" type="VBoxContainer" parent="CanvasLayer/MarginContainer"]
 layout_mode = 2
+theme_override_constants/separation = 16
 
-[node name="Label" type="Label" parent="CanvasLayer/MarginContainer/VBoxContainer"]
+[node name="Label" type="RichTextLabel" parent="CanvasLayer/MarginContainer/VBoxContainer"]
 layout_mode = 2
-text = "This is a test app for the GodotAndroidPlugin app. Run this project on an Android device (by exporting to a device)."
-autowrap_mode = 2
+text = "This is a test app for the GodotAndroidPlugin app. 
+
+Use a remote deploy export to test features of this plugin."
+fit_content = true
 
 [node name="CheckCameraPermissionsButton" type="Button" parent="CanvasLayer/MarginContainer/VBoxContainer"]
 unique_name_in_owner = true

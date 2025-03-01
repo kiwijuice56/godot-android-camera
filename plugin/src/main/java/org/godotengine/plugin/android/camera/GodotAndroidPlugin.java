@@ -20,6 +20,7 @@ import org.godotengine.godot.plugin.UsedByGodot;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 
 public class GodotAndroidPlugin extends GodotPlugin {
@@ -28,8 +29,8 @@ public class GodotAndroidPlugin extends GodotPlugin {
     private Handler cameraHandler;
     private SurfaceTexture surfaceTexture;
 
-    private final int CAMERA_WIDTH = 512;
-    private final int CAMERA_HEIGHT = 512;
+    private final int CAMERA_WIDTH = 1024;
+    private final int CAMERA_HEIGHT = 1024;
 
     // in milliseconds (50 ms ~= 20 fps)
     private final int CAPTURE_INTERVAL = 50;
@@ -72,9 +73,23 @@ public class GodotAndroidPlugin extends GodotPlugin {
                 camera = Camera.open();
                 Camera.Parameters params = camera.getParameters();
 
+                List<String> focusModes = params.getSupportedFocusModes();
+                if (focusModes != null) {
+                    if (focusModes.contains(Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE)) {
+                        params.setFocusMode(Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE);
+                        Log.i(getPluginName(), "Set focus mode to CONTINUOUS_PICTURE");
+                    } else if (focusModes.contains(Camera.Parameters.FOCUS_MODE_AUTO)) {
+                        params.setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO);
+                        Log.i(getPluginName(), "Set focus mode to AUTO");
+                    } else {
+                        Log.w(getPluginName(), "No supported autofocus modes found.");
+                    }
+                }
+
                 Camera.Size size = getBestPreviewSize(params, CAMERA_WIDTH, CAMERA_HEIGHT);
                 params.setPreviewSize(size.width, size.height);
                 params.setPreviewFormat(ImageFormat.NV21);
+                params.setFlashMode(Camera.Parameters.FLASH_MODE_TORCH);
                 camera.setParameters(params);
 
                 int bufferSize = size.width * size.height *
