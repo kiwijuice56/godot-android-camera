@@ -33,6 +33,6 @@ google-services.json
 *.hprof
 
 # Godot
-godot-project/android/
-godot-project/addons/
-godot-project/.godot/
+plugin/demo/android/
+plugin/demo/addons/
+plugin/demo/.godot/

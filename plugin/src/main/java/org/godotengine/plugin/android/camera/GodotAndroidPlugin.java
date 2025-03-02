@@ -1,9 +1,10 @@
-// For transparency:
-// Most of this code was generated with ChatGPT --
-// Needs further testing
+// For transparency: Much of this code was generated with ChatGPT
 
 package org.godotengine.plugin.android.camera;
 
+import android.Manifest;
+import android.app.Activity;
+import android.content.pm.PackageManager;
 import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
 import android.hardware.Camera;
@@ -12,6 +13,8 @@ import android.os.HandlerThread;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 import org.godotengine.godot.Godot;
 import org.godotengine.godot.plugin.GodotPlugin;
@@ -23,23 +26,26 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
+/** @noinspection ALL*/
 public class GodotAndroidPlugin extends GodotPlugin {
+    private static final int CAMERA_PERMISSION_REQUEST = 1024;
+
+    private Activity activity;
     private Camera camera;
     private HandlerThread cameraThread;
     private Handler cameraHandler;
     private SurfaceTexture surfaceTexture;
 
-    private final int CAMERA_WIDTH = 1024;
-    private final int CAMERA_HEIGHT = 1024;
-
-    // in milliseconds (50 ms ~= 20 fps)
-    private final int CAPTURE_INTERVAL = 50;
+    // in milliseconds (ex: capture_interval = 50 ms will record at 20 fps)
+    protected int capture_interval;
 
     private byte[] previewBuffer;
     private volatile boolean isRunning = false;
 
     public GodotAndroidPlugin(Godot godot) {
         super(godot);
+
+        activity = godot.getActivity();
     }
 
     @NonNull
@@ -51,18 +57,18 @@ public class GodotAndroidPlugin extends GodotPlugin {
     @NonNull
     @Override
     public Set<SignalInfo> getPluginSignals() {
-        return Collections.singleton(
-                new SignalInfo("on_camera_frame", byte[].class, Integer.class, Integer.class)
-        );
+        return Collections.singleton(new SignalInfo("on_camera_frame", byte[].class, Integer.class, Integer.class));
     }
 
     @UsedByGodot
-    public void startCamera() {
+    public void startCamera(int desired_width, int desired_height, int capture_interval, boolean flash_on) {
         if (isRunning) {
             Log.w(getPluginName(), "Camera already started.");
             return;
         }
         isRunning = true;
+
+        this.capture_interval = capture_interval;
 
         cameraThread = new HandlerThread("CameraThread");
         cameraThread.start();
@@ -86,14 +92,14 @@ public class GodotAndroidPlugin extends GodotPlugin {
                     }
                 }
 
-                Camera.Size size = getBestPreviewSize(params, CAMERA_WIDTH, CAMERA_HEIGHT);
+                Camera.Size size = getClosestPreviewSize(params, desired_width, desired_height);
                 params.setPreviewSize(size.width, size.height);
                 params.setPreviewFormat(ImageFormat.NV21);
-                params.setFlashMode(Camera.Parameters.FLASH_MODE_TORCH);
+                params.setFlashMode(flash_on ? Camera.Parameters.FLASH_MODE_AUTO : Camera.Parameters.FLASH_MODE_OFF);
+
                 camera.setParameters(params);
 
-                int bufferSize = size.width * size.height *
-                        ImageFormat.getBitsPerPixel(ImageFormat.NV21) / 8;
+                int bufferSize = size.width * size.height * ImageFormat.getBitsPerPixel(ImageFormat.NV21) / 8;
                 previewBuffer = new byte[bufferSize];
 
                 surfaceTexture = new SurfaceTexture(10); // Texture id can be arbitrary
@@ -102,9 +108,9 @@ public class GodotAndroidPlugin extends GodotPlugin {
                 camera.setPreviewCallbackWithBuffer(previewCallback);
                 camera.startPreview();
 
-                Log.i(getPluginName(), "Camera preview started successfully on SurfaceTexture");
+                Log.i(getPluginName(), "Camera preview started successfully on SurfaceTexture.");
             } catch (IOException e) {
-                Log.e(getPluginName(), "Couldn't start camera. " + e.getMessage());
+                Log.e(getPluginName(), "Couldn't start camera: " + e.getMessage());
                 isRunning = false;
             } catch (Exception e) {
                 Log.e(getPluginName(), "General error starting camera: ", e);
@@ -121,13 +127,13 @@ public class GodotAndroidPlugin extends GodotPlugin {
         }
         isRunning = false;
         cameraHandler.post(() -> {
-            if(camera!=null){
+            if (camera != null) {
                 camera.setPreviewCallbackWithBuffer(null);
                 camera.stopPreview();
                 camera.release();
                 camera = null;
             }
-            if(surfaceTexture != null){
+            if (surfaceTexture != null) {
                 surfaceTexture.release();
                 surfaceTexture = null;
             }
@@ -135,7 +141,15 @@ public class GodotAndroidPlugin extends GodotPlugin {
         });
     }
 
-    private Camera.Size getBestPreviewSize(Camera.Parameters params, int width, int height) {
+    @UsedByGodot
+    public boolean requestCameraPermissions() {
+        if (ContextCompat.checkSelfPermission(activity, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(activity, new String[]{Manifest.permission.CAMERA}, CAMERA_PERMISSION_REQUEST);
+        }
+        return ContextCompat.checkSelfPermission(activity, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private Camera.Size getClosestPreviewSize(Camera.Parameters params, int width, int height) {
         Camera.Size bestSize = params.getSupportedPreviewSizes().get(0);
         int diff = Integer.MAX_VALUE;
         for (Camera.Size size : params.getSupportedPreviewSizes()) {
@@ -153,15 +167,14 @@ public class GodotAndroidPlugin extends GodotPlugin {
         @Override
         public void onPreviewFrame(byte[] data, Camera camera) {
             long t = System.currentTimeMillis();
-            if (t - lastFrameTime >= CAPTURE_INTERVAL && isRunning) {
+            if (t - lastFrameTime >= capture_interval && isRunning) {
                 Camera.Size size = camera.getParameters().getPreviewSize();
                 byte[] frameData = data.clone();
                 // Send frame data back to godot
-                emitSignal("on_camera_frame", yuv2rgb(frameData, size.width, size.height),
-                        size.width, size.height);
+                emitSignal("on_camera_frame", yuv2rgb(frameData, size.width, size.height), size.width, size.height);
                 lastFrameTime = t;
             }
-            if(isRunning){
+            if (isRunning) {
                 camera.addCallbackBuffer(previewBuffer);
             }
         }
@@ -169,7 +182,7 @@ public class GodotAndroidPlugin extends GodotPlugin {
 
     // Modified from https://github.com/yushulx/NV21-to-RGB
     // Converts an image from YUV to RGB_888 as a byte array
-    public static byte[] yuv2rgb(byte[] yuv, int width, int height) {
+    private static byte[] yuv2rgb(byte[] yuv, int width, int height) {
         int total = width * height;
         byte[] rgb = new byte[total * 3];
         int Y, Cb = 0, Cr = 0, index = 0;

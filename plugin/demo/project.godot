@@ -10,17 +10,24 @@ config_version=5
 
 [application]
 
-config/name="Android Plugin Demo"
-run/main_scene="res://main.tscn"
-config/features=PackedStringArray("4.2", "GL Compatibility")
+config/name="Demo Camera App"
+run/main_scene="uid://coun7joy8o2i2"
+config/features=PackedStringArray("4.4", "Mobile")
 config/icon="res://icon.svg"
 
-[debug]
+[display]
 
-settings/stdout/verbose_stdout=true
+window/size/viewport_width=1080
+window/size/viewport_height=1920
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep_width"
+window/handheld/orientation=1
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/GodotAndroidCamera/plugin.cfg")
 
 [rendering]
 
-renderer/rendering_method="gl_compatibility"
-renderer/rendering_method.mobile="gl_compatibility"
+renderer/rendering_method="mobile"
 textures/vram_compression/import_etc2_astc=true
