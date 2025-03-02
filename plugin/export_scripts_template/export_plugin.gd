@@ -1,6 +1,8 @@
 @tool
 extends EditorPlugin
 
+const _plugin_name: String = "GodotAndroidCamera"
+
 var export_plugin: AndroidExportPlugin
 
 func _enter_tree() -> void:
@@ -8,14 +10,10 @@ func _enter_tree() -> void:
 	add_export_plugin(export_plugin)
 
 func _exit_tree() -> void:
-	# Clean-up of the plugin goes here.
 	remove_export_plugin(export_plugin)
 	export_plugin = null
 
-
 class AndroidExportPlugin extends EditorExportPlugin:
-	var _plugin_name = "GodotAndroidCamera"
-
 	func _supports_platform(platform):
 		if platform is EditorExportPlatformAndroid:
 			return true
