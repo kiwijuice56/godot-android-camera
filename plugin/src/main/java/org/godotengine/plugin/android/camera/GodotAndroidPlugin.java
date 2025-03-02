@@ -1,4 +1,8 @@
-// For transparency: Much of this code was generated with ChatGPT
+// For transparency: Much of this code was generated with the help of ChatGPT.
+
+// I reviewed and refactored it, but there may be underlying issues due to my inexperience with Android code.
+
+// This code also makes use of the deprecated Camera API, so it is not guaranteed to work in the future.
 
 package org.godotengine.plugin.android.camera;
 
