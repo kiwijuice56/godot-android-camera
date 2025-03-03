@@ -48,7 +48,6 @@ public class GodotAndroidPlugin extends GodotPlugin {
 
     public GodotAndroidPlugin(Godot godot) {
         super(godot);
-
         activity = godot.getActivity();
     }
 
@@ -99,7 +98,7 @@ public class GodotAndroidPlugin extends GodotPlugin {
                 Camera.Size size = getClosestPreviewSize(params, desired_width, desired_height);
                 params.setPreviewSize(size.width, size.height);
                 params.setPreviewFormat(ImageFormat.NV21);
-                params.setFlashMode(flash_on ? Camera.Parameters.FLASH_MODE_AUTO : Camera.Parameters.FLASH_MODE_OFF);
+                params.setFlashMode(flash_on ? Camera.Parameters.FLASH_MODE_TORCH : Camera.Parameters.FLASH_MODE_OFF);
 
                 camera.setParameters(params);
 
