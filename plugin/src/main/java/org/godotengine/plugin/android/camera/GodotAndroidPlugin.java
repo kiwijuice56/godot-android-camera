@@ -40,9 +40,6 @@ public class GodotAndroidPlugin extends GodotPlugin {
     private Handler cameraHandler;
     private SurfaceTexture surfaceTexture;
 
-    // in milliseconds (ex: capture_interval = 50 ms will record at 20 fps)
-    protected int capture_interval;
-
     private byte[] previewBuffer;
     private volatile boolean isRunning = false;
 
@@ -60,18 +57,16 @@ public class GodotAndroidPlugin extends GodotPlugin {
     @NonNull
     @Override
     public Set<SignalInfo> getPluginSignals() {
-        return Collections.singleton(new SignalInfo("on_camera_frame", byte[].class, Integer.class, Integer.class));
+        return Collections.singleton(new SignalInfo("on_camera_frame", Long.class, byte[].class, Integer.class, Integer.class));
     }
 
     @UsedByGodot
-    public void startCamera(int desired_width, int desired_height, int capture_interval, boolean flash_on) {
+    public void startCamera(int desired_width, int desired_height, boolean flash_on) {
         if (isRunning) {
             Log.w(getPluginName(), "Camera already started.");
             return;
         }
         isRunning = true;
-
-        this.capture_interval = capture_interval;
 
         cameraThread = new HandlerThread("CameraThread");
         cameraThread.start();
@@ -97,15 +92,21 @@ public class GodotAndroidPlugin extends GodotPlugin {
 
                 Camera.Size size = getClosestPreviewSize(params, desired_width, desired_height);
                 params.setPreviewSize(size.width, size.height);
+                Log.w(getPluginName(), String.format("Camera size: %d, %d", size.width, size.height));
+
                 params.setPreviewFormat(ImageFormat.NV21);
                 params.setFlashMode(flash_on ? Camera.Parameters.FLASH_MODE_TORCH : Camera.Parameters.FLASH_MODE_OFF);
+
+                int[] fpsRange = getHighestConsistentFps(params);
+                params.setPreviewFpsRange(fpsRange[Camera.Parameters.PREVIEW_FPS_MIN_INDEX], fpsRange[Camera.Parameters.PREVIEW_FPS_MAX_INDEX]);
+                Log.w(getPluginName(), String.format("Camera FPS: %d, %d", fpsRange[Camera.Parameters.PREVIEW_FPS_MIN_INDEX], fpsRange[Camera.Parameters.PREVIEW_FPS_MAX_INDEX]));
 
                 camera.setParameters(params);
 
                 int bufferSize = size.width * size.height * ImageFormat.getBitsPerPixel(ImageFormat.NV21) / 8;
                 previewBuffer = new byte[bufferSize];
 
-                surfaceTexture = new SurfaceTexture(10); // Texture id can be arbitrary
+                surfaceTexture = new SurfaceTexture(10); // Texture ID is arbitrary
                 camera.setPreviewTexture(surfaceTexture);
                 camera.addCallbackBuffer(previewBuffer);
                 camera.setPreviewCallbackWithBuffer(previewCallback);
@@ -165,19 +166,35 @@ public class GodotAndroidPlugin extends GodotPlugin {
         return bestSize;
     }
 
+    private int[] getHighestConsistentFps(Camera.Parameters params) {
+        int[] highestRange = null; // variable frame rate
+        int[] highestConsistentRange = null; // stable frame rate
+
+        for (int[] range : params.getSupportedPreviewFpsRange()) {
+            Log.w(getPluginName(), String.format("Potential Camera FPS: %d, %d", range[Camera.Parameters.PREVIEW_FPS_MIN_INDEX], range[Camera.Parameters.PREVIEW_FPS_MAX_INDEX]));
+
+            int min = range[Camera.Parameters.PREVIEW_FPS_MIN_INDEX];
+            int max = range[Camera.Parameters.PREVIEW_FPS_MAX_INDEX];
+
+            if (highestRange == null || max > highestRange[Camera.Parameters.PREVIEW_FPS_MAX_INDEX]) {
+                highestRange = range;
+            }
+
+            if (min == max && (highestConsistentRange == null || max > highestConsistentRange[Camera.Parameters.PREVIEW_FPS_MAX_INDEX])) {
+                highestConsistentRange = range;
+            }
+        }
+        return highestConsistentRange == null ? highestRange : highestConsistentRange;
+    }
+
     private final Camera.PreviewCallback previewCallback = new Camera.PreviewCallback() {
-        long lastFrameTime = 0;
         @Override
         public void onPreviewFrame(byte[] data, Camera camera) {
-            long t = System.currentTimeMillis();
-            if (t - lastFrameTime >= capture_interval && isRunning) {
+            long timestamp = System.currentTimeMillis();
+            if (isRunning) {
                 Camera.Size size = camera.getParameters().getPreviewSize();
                 byte[] frameData = data.clone();
-                // Send frame data back to godot
-                emitSignal("on_camera_frame", yuv2rgb(frameData, size.width, size.height), size.width, size.height);
-                lastFrameTime = t;
-            }
-            if (isRunning) {
+                emitSignal("on_camera_frame", timestamp, yuv2rgb(frameData, size.width, size.height), size.width, size.height);
                 camera.addCallbackBuffer(previewBuffer);
             }
         }
