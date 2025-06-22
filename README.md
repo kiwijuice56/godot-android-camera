@@ -25,7 +25,7 @@ func _on_check_camera_permissions() -> void:
 	android_camera.request_camera_permissions()
 
 func _on_start_capturing_pressed() -> void:
-	android_camera.start_camera(1024, 1024, 50, false)
+	android_camera.start_camera()
 
 func _on_stop_capturing_pressed() -> void:
 	android_camera.stop_camera()

@@ -118,7 +118,7 @@ public class GodotAndroidPlugin extends GodotPlugin {
                 new Camera2Interop.Extender<>(imageAnalysisBuilder);
         ext.setCaptureRequestOption(
                 CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
-                new Range<>(30, 30)
+                new Range<>(60, 60)
         );
 
         ResolutionSelector resolutionSelector = new ResolutionSelector.Builder()
