@@ -9,6 +9,8 @@ package org.godotengine.plugin.android.camera;
 import android.Manifest;
 import android.app.Activity;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.PixelFormat;
 import android.hardware.camera2.CaptureRequest;
 import android.media.Image;
 import android.util.Log;
@@ -21,6 +23,8 @@ import androidx.camera.core.Camera;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.Preview;
+import androidx.camera.core.resolutionselector.ResolutionSelector;
+import androidx.camera.core.resolutionselector.ResolutionStrategy;
 import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -33,6 +37,8 @@ import org.godotengine.godot.plugin.GodotPlugin;
 import org.godotengine.godot.plugin.SignalInfo;
 import org.godotengine.godot.plugin.UsedByGodot;
 
+import java.io.ByteArrayOutputStream;
+import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
@@ -112,17 +118,27 @@ public class GodotAndroidPlugin extends GodotPlugin {
                 new Camera2Interop.Extender<>(imageAnalysisBuilder);
         ext.setCaptureRequestOption(
                 CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
-                new Range<>(60, 120)
+                new Range<>(30, 30)
         );
 
+        ResolutionSelector resolutionSelector = new ResolutionSelector.Builder()
+                .setResolutionStrategy(
+                        new ResolutionStrategy(
+                                new Size(128, 128),
+                                ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER))
+                .build();
+
         ImageAnalysis imageAnalysis = imageAnalysisBuilder
-                .setTargetResolution(new Size(256, 256))
-                .setBackpressureStrategy(ImageAnalysis.STRATEGY_BLOCK_PRODUCER)
+                .setResolutionSelector(resolutionSelector)
+                .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                 .build();
         imageAnalysis.setAnalyzer(executor, image -> {
-            Image data = image.getImage();
-            if (data != null) {
-                data.
+            long timestamp = System.currentTimeMillis();
+            if (image.getFormat() == PixelFormat.RGBA_8888) {
+                ByteBuffer buffer = image.getImage().getPlanes()[0].getBuffer();
+                byte[] rgbData = new byte[buffer.remaining()];
+                buffer.get(rgbData);
+                emitSignal("on_camera_frame", timestamp, rgbData, image.getWidth(), image.getHeight());
             }
             image.close();
         });

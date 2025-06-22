@@ -16,7 +16,7 @@ func _on_camera_frame(timestamp: int, data: PackedByteArray, width: int, height:
 	if not is_instance_valid(java_interface):
 		_initialize_java_interface()
 
-	var image: Image = Image.create_from_data(width, height, false, Image.FORMAT_RGB8, data,)
+	var image: Image = Image.create_from_data(width, height, false, Image.FORMAT_RGBA8, data,)
 	camera_frame.emit(timestamp, ImageTexture.create_from_image(image))
 
 ## Shows camera permissions pop-up. Required for other camera functions to work.
