@@ -26,7 +26,13 @@ class AndroidExportPlugin extends EditorExportPlugin:
 			return PackedStringArray([_plugin_name + "/bin/release/" + _plugin_name + "-release.aar"])
 
 	func _get_android_dependencies(platform, debug):
-		return PackedStringArray(["androidx.core:core:1.9.0"])
+		return PackedStringArray([
+			"androidx.core:core:1.9.0",
+			"androidx.camera:camera-lifecycle:1.4.2",
+			"androidx.camera:camera-core:1.4.2",
+			"androidx.camera:camera-camera2:1.4.2",
+			"androidx.camera:camera-view:1.4.2",
+		])
 
 	func _get_name():
 		return _plugin_name

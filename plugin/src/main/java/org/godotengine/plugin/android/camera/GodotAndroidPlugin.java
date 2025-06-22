@@ -9,38 +9,44 @@ package org.godotengine.plugin.android.camera;
 import android.Manifest;
 import android.app.Activity;
 import android.content.pm.PackageManager;
-import android.graphics.ImageFormat;
-import android.graphics.SurfaceTexture;
-import android.hardware.Camera;
-import android.os.Handler;
-import android.os.HandlerThread;
+import android.hardware.camera2.CaptureRequest;
+import android.media.Image;
 import android.util.Log;
+import android.util.Range;
+import android.util.Size;
 
 import androidx.annotation.NonNull;
+import androidx.camera.camera2.interop.Camera2Interop;
+import androidx.camera.core.Camera;
+import androidx.camera.core.CameraSelector;
+import androidx.camera.core.ImageAnalysis;
+import androidx.camera.core.Preview;
+import androidx.camera.lifecycle.ProcessCameraProvider;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.lifecycle.LifecycleOwner;
+
+import com.google.common.util.concurrent.ListenableFuture;
 
 import org.godotengine.godot.Godot;
 import org.godotengine.godot.plugin.GodotPlugin;
 import org.godotengine.godot.plugin.SignalInfo;
 import org.godotengine.godot.plugin.UsedByGodot;
 
-import java.io.IOException;
 import java.util.Collections;
-import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 /** @noinspection ALL*/
 public class GodotAndroidPlugin extends GodotPlugin {
-    private static final int CAMERA_PERMISSION_REQUEST = 1024;
+    private int REQUEST_CODE_PERMISSIONS = 1001;
+
+    private Executor executor = Executors.newSingleThreadExecutor();
+    ProcessCameraProvider cameraProvider;
 
     private Activity activity;
-    private Camera camera;
-    private HandlerThread cameraThread;
-    private Handler cameraHandler;
-    private SurfaceTexture surfaceTexture;
-
-    private byte[] previewBuffer;
     private volatile boolean isRunning = false;
 
     public GodotAndroidPlugin(Godot godot) {
@@ -61,144 +67,78 @@ public class GodotAndroidPlugin extends GodotPlugin {
     }
 
     @UsedByGodot
-    public void startCamera(int desired_width, int desired_height, boolean flash_on) {
+    public void startCamera() {
         if (isRunning) {
-            Log.w(getPluginName(), "Camera already started.");
-            return;
+            Log.e(getPluginName(), "Camera is already running.");
         }
         isRunning = true;
 
-        cameraThread = new HandlerThread("CameraThread");
-        cameraThread.start();
-        cameraHandler = new Handler(cameraThread.getLooper());
+        final ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(activity);
+        cameraProviderFuture.addListener(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    cameraProvider = cameraProviderFuture.get();
+                    bindPreview(cameraProvider);
 
-        cameraHandler.post(() -> {
-            try {
-                camera = Camera.open();
-                Camera.Parameters params = camera.getParameters();
-
-                List<String> focusModes = params.getSupportedFocusModes();
-                if (focusModes != null) {
-                    if (focusModes.contains(Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE)) {
-                        params.setFocusMode(Camera.Parameters.FOCUS_MODE_CONTINUOUS_PICTURE);
-                        Log.i(getPluginName(), "Set focus mode to CONTINUOUS_PICTURE");
-                    } else if (focusModes.contains(Camera.Parameters.FOCUS_MODE_AUTO)) {
-                        params.setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO);
-                        Log.i(getPluginName(), "Set focus mode to AUTO");
-                    } else {
-                        Log.w(getPluginName(), "No supported autofocus modes found.");
-                    }
+                } catch (ExecutionException | InterruptedException e) {
+                    // This should never be reached
                 }
-
-                Camera.Size size = getClosestPreviewSize(params, desired_width, desired_height);
-                params.setPreviewSize(size.width, size.height);
-                Log.w(getPluginName(), String.format("Camera size: %d, %d", size.width, size.height));
-
-                params.setPreviewFormat(ImageFormat.NV21);
-                params.setFlashMode(flash_on ? Camera.Parameters.FLASH_MODE_TORCH : Camera.Parameters.FLASH_MODE_OFF);
-
-                int[] fpsRange = getHighestConsistentFps(params);
-                params.setPreviewFpsRange(fpsRange[Camera.Parameters.PREVIEW_FPS_MIN_INDEX], fpsRange[Camera.Parameters.PREVIEW_FPS_MAX_INDEX]);
-                Log.w(getPluginName(), String.format("Camera FPS: %d, %d", fpsRange[Camera.Parameters.PREVIEW_FPS_MIN_INDEX], fpsRange[Camera.Parameters.PREVIEW_FPS_MAX_INDEX]));
-
-                camera.setParameters(params);
-
-                int bufferSize = size.width * size.height * ImageFormat.getBitsPerPixel(ImageFormat.NV21) / 8;
-                previewBuffer = new byte[bufferSize];
-
-                surfaceTexture = new SurfaceTexture(10); // Texture ID is arbitrary
-                camera.setPreviewTexture(surfaceTexture);
-                camera.addCallbackBuffer(previewBuffer);
-                camera.setPreviewCallbackWithBuffer(previewCallback);
-                camera.startPreview();
-
-                Log.i(getPluginName(), "Camera preview started successfully on SurfaceTexture.");
-            } catch (IOException e) {
-                Log.e(getPluginName(), "Couldn't start camera: " + e.getMessage());
-                isRunning = false;
-            } catch (Exception e) {
-                Log.e(getPluginName(), "General error starting camera: ", e);
-                isRunning = false;
             }
-        });
+        }, ContextCompat.getMainExecutor(activity));
     }
 
     @UsedByGodot
     public void stopCamera() {
         if (!isRunning) {
-            Log.w(getPluginName(), "Camera already stopped.");
-            return;
+            Log.e(getPluginName(), "Camera is already stopped.");
         }
         isRunning = false;
-        cameraHandler.post(() -> {
-            if (camera != null) {
-                camera.setPreviewCallbackWithBuffer(null);
-                camera.stopPreview();
-                camera.release();
-                camera = null;
+
+        if (cameraProvider != null) {
+            cameraProvider.unbindAll();
+        }
+    }
+
+    private void bindPreview(@NonNull ProcessCameraProvider cameraProvider) {
+        Preview preview = new Preview.Builder()
+                .build();
+        CameraSelector cameraSelector = new CameraSelector.Builder()
+                .requireLensFacing(CameraSelector.LENS_FACING_BACK)
+                .build();
+        ImageAnalysis.Builder imageAnalysisBuilder = new ImageAnalysis.Builder();
+
+        Camera2Interop.Extender<ImageAnalysis> ext =
+                new Camera2Interop.Extender<>(imageAnalysisBuilder);
+        ext.setCaptureRequestOption(
+                CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
+                new Range<>(60, 120)
+        );
+
+        ImageAnalysis imageAnalysis = imageAnalysisBuilder
+                .setTargetResolution(new Size(256, 256))
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_BLOCK_PRODUCER)
+                .build();
+        imageAnalysis.setAnalyzer(executor, image -> {
+            Image data = image.getImage();
+            if (data != null) {
+                data.
             }
-            if (surfaceTexture != null) {
-                surfaceTexture.release();
-                surfaceTexture = null;
-            }
-            cameraThread.quitSafely();
+            image.close();
         });
+        cameraProvider.unbindAll();
+        Camera camera = cameraProvider.bindToLifecycle((LifecycleOwner) activity, cameraSelector, imageAnalysis);
     }
 
     @UsedByGodot
-    public boolean requestCameraPermissions() {
-        if (ContextCompat.checkSelfPermission(activity, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(activity, new String[]{Manifest.permission.CAMERA}, CAMERA_PERMISSION_REQUEST);
-        }
+    public boolean allPermissionsGranted() {
         return ContextCompat.checkSelfPermission(activity, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED;
     }
 
-    private Camera.Size getClosestPreviewSize(Camera.Parameters params, int width, int height) {
-        Camera.Size bestSize = params.getSupportedPreviewSizes().get(0);
-        int diff = Integer.MAX_VALUE;
-        for (Camera.Size size : params.getSupportedPreviewSizes()) {
-            int new_diff = Math.abs(size.width - width) + Math.abs(size.height - height);
-            if (new_diff < diff) {
-                bestSize = size;
-                diff = new_diff;
-            }
-        }
-        return bestSize;
+    @UsedByGodot
+    public void requestCameraPermissions() {
+        ActivityCompat.requestPermissions(activity, new String[]{Manifest.permission.CAMERA}, REQUEST_CODE_PERMISSIONS);
     }
-
-    private int[] getHighestConsistentFps(Camera.Parameters params) {
-        int[] highestRange = null; // variable frame rate
-        int[] highestConsistentRange = null; // stable frame rate
-
-        for (int[] range : params.getSupportedPreviewFpsRange()) {
-            Log.w(getPluginName(), String.format("Potential Camera FPS: %d, %d", range[Camera.Parameters.PREVIEW_FPS_MIN_INDEX], range[Camera.Parameters.PREVIEW_FPS_MAX_INDEX]));
-
-            int min = range[Camera.Parameters.PREVIEW_FPS_MIN_INDEX];
-            int max = range[Camera.Parameters.PREVIEW_FPS_MAX_INDEX];
-
-            if (highestRange == null || max > highestRange[Camera.Parameters.PREVIEW_FPS_MAX_INDEX]) {
-                highestRange = range;
-            }
-
-            if (min == max && (highestConsistentRange == null || max > highestConsistentRange[Camera.Parameters.PREVIEW_FPS_MAX_INDEX])) {
-                highestConsistentRange = range;
-            }
-        }
-        return highestConsistentRange == null ? highestRange : highestConsistentRange;
-    }
-
-    private final Camera.PreviewCallback previewCallback = new Camera.PreviewCallback() {
-        @Override
-        public void onPreviewFrame(byte[] data, Camera camera) {
-            long timestamp = System.currentTimeMillis();
-            if (isRunning) {
-                Camera.Size size = camera.getParameters().getPreviewSize();
-                byte[] frameData = data.clone();
-                emitSignal("on_camera_frame", timestamp, yuv2rgb(frameData, size.width, size.height), size.width, size.height);
-                camera.addCallbackBuffer(previewBuffer);
-            }
-        }
-    };
 
     // Modified from https://github.com/yushulx/NV21-to-RGB
     // Converts an image from YUV to RGB_888 as a byte array

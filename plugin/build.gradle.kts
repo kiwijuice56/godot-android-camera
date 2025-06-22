@@ -15,6 +15,7 @@ android {
 
     buildFeatures {
         buildConfig = true
+        viewBinding = true
     }
 
     defaultConfig {
@@ -27,9 +28,10 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
     }
+
     kotlinOptions {
         jvmTarget = "17"
     }
@@ -37,8 +39,12 @@ android {
 
 dependencies {
     implementation("org.godotengine:godot:4.3.0.stable")
-    implementation("androidx.core:core:1.9.0")
-    // TODO: Additional dependencies should be added to export_plugin.gd as well.
+    implementation("androidx.camera:camera-camera2:1.4.2")
+    implementation("androidx.camera:camera-lifecycle:1.4.2")
+    implementation("androidx.camera:camera-core:1.4.2")
+    // implementation("androidx.camera:camera-video:1.4.2")
+    implementation("androidx.camera:camera-view:1.4.2")
+    // implementation("androidx.camera:camera-extensions:1.4.2")
 }
 
 

@@ -15,7 +15,7 @@ func _initialize_java_interface() -> void:
 func _on_camera_frame(timestamp: int, data: PackedByteArray, width: int, height: int) -> void:
 	if not is_instance_valid(java_interface):
 		_initialize_java_interface()
-	
+
 	var image: Image = Image.create_from_data(width, height, false, Image.FORMAT_RGB8, data,)
 	camera_frame.emit(timestamp, ImageTexture.create_from_image(image))
 
@@ -24,8 +24,9 @@ func _on_camera_frame(timestamp: int, data: PackedByteArray, width: int, height:
 func request_camera_permissions() -> bool:
 	if not is_instance_valid(java_interface):
 		_initialize_java_interface()
-	
-	return java_interface.requestCameraPermissions()
+
+	java_interface.requestCameraPermissions()
+	return java_interface.allPermissionsGranted()
 
 ## Starts streaming camera frames (via camera_frame signal) with given parameters.
 ## The highest possible FPS is selected by default.
@@ -33,12 +34,12 @@ func request_camera_permissions() -> bool:
 func start_camera(desired_width: int, desired_height: int, flash_on: bool) -> void:
 	if not is_instance_valid(java_interface):
 		_initialize_java_interface()
-	
-	java_interface.startCamera(desired_width, desired_height, flash_on)
+
+	java_interface.startCamera()
 
 ## Stops camera streaming.
 func stop_camera() -> void:
 	if not is_instance_valid(java_interface):
 		_initialize_java_interface()
-	
+
 	java_interface.stopCamera()
