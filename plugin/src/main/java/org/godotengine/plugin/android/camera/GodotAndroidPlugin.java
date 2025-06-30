@@ -1,18 +1,10 @@
-// For transparency: Much of this code was generated with the help of ChatGPT.
-
-// I reviewed and refactored it, but there may be underlying issues due to my inexperience with Android code.
-
-// This code also makes use of the deprecated Camera API, so it is not guaranteed to work in the future.
-
 package org.godotengine.plugin.android.camera;
 
 import android.Manifest;
 import android.app.Activity;
 import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
 import android.graphics.PixelFormat;
 import android.hardware.camera2.CaptureRequest;
-import android.media.Image;
 import android.util.Log;
 import android.util.Range;
 import android.util.Size;
@@ -37,7 +29,6 @@ import org.godotengine.godot.plugin.GodotPlugin;
 import org.godotengine.godot.plugin.SignalInfo;
 import org.godotengine.godot.plugin.UsedByGodot;
 
-import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.Set;
@@ -154,43 +145,5 @@ public class GodotAndroidPlugin extends GodotPlugin {
     @UsedByGodot
     public void requestCameraPermissions() {
         ActivityCompat.requestPermissions(activity, new String[]{Manifest.permission.CAMERA}, REQUEST_CODE_PERMISSIONS);
-    }
-
-    // Modified from https://github.com/yushulx/NV21-to-RGB
-    // Converts an image from YUV to RGB_888 as a byte array
-    private static byte[] yuv2rgb(byte[] yuv, int width, int height) {
-        int total = width * height;
-        byte[] rgb = new byte[total * 3];
-        int Y, Cb = 0, Cr = 0, index = 0;
-        int R, G, B;
-
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                Y = yuv[y * width + x];
-                if (Y < 0) Y += 255;
-
-                if ((x & 1) == 0) {
-                    Cr = yuv[(y >> 1) * (width) + x + total];
-                    Cb = yuv[(y >> 1) * (width) + x + total + 1];
-
-                    if (Cb < 0) Cb += 127; else Cb -= 128;
-                    if (Cr < 0) Cr += 127; else Cr -= 128;
-                }
-
-                R = Y + Cr + (Cr >> 2) + (Cr >> 3) + (Cr >> 5);
-                G = Y - (Cb >> 2) + (Cb >> 4) + (Cb >> 5) - (Cr >> 1) + (Cr >> 3) + (Cr >> 4) + (Cr >> 5);
-                B = Y + Cb + (Cb >> 1) + (Cb >> 2) + (Cb >> 6);
-
-                if (R < 0) R = 0; else if (R > 255) R = 255;
-                if (G < 0) G = 0; else if (G > 255) G = 255;
-                if (B < 0) B = 0; else if (B > 255) B = 255;
-
-                rgb[index++] = (byte) R;
-                rgb[index++] = (byte) G;
-                rgb[index++] = (byte) B;
-            }
-        }
-
-        return rgb;
     }
 }
