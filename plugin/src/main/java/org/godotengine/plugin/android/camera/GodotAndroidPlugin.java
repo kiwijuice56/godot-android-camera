@@ -2,9 +2,16 @@ package org.godotengine.plugin.android.camera;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.PixelFormat;
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CaptureRequest;
+import android.media.Image;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.util.Range;
 import android.util.Size;
@@ -38,12 +45,18 @@ import java.util.concurrent.Executors;
 
 /** @noinspection ALL*/
 public class GodotAndroidPlugin extends GodotPlugin {
+    // Recording parameters
+    private int width;
+    private int height;
+    private boolean flash_on;
+
     private int REQUEST_CODE_PERMISSIONS = 1001;
 
     private Executor executor = Executors.newSingleThreadExecutor();
     ProcessCameraProvider cameraProvider;
 
     private Activity activity;
+    private Camera camera;
     private volatile boolean isRunning = false;
 
     public GodotAndroidPlugin(Godot godot) {
@@ -64,11 +77,16 @@ public class GodotAndroidPlugin extends GodotPlugin {
     }
 
     @UsedByGodot
-    public void startCamera() {
+    public void startCamera(int recordingWidth, int recordingHeight, boolean flash_on) {
         if (isRunning) {
             Log.e(getPluginName(), "Camera is already running.");
+            return;
         }
         isRunning = true;
+
+        this.width = recordingWidth;
+        this.height = recordingHeight;
+        this.flash_on = flash_on;
 
         final ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(activity);
         cameraProviderFuture.addListener(new Runnable() {
@@ -92,12 +110,47 @@ public class GodotAndroidPlugin extends GodotPlugin {
         }
         isRunning = false;
 
-        if (cameraProvider != null) {
-            cameraProvider.unbindAll();
-        }
+        new Handler(Looper.getMainLooper()).post(() -> {
+            if (cameraProvider != null) {
+                if (flash_on && camera != null) {
+                    camera.getCameraControl().enableTorch(false);
+                }
+                cameraProvider.unbindAll();
+            }
+        });
     }
 
     private void bindPreview(@NonNull ProcessCameraProvider cameraProvider) {
+        // Find the highest FPS range before creating our ImageAnalysis
+        Range<Integer> highestFpsRange = null;
+        CameraManager manager = (CameraManager) activity.getSystemService(Context.CAMERA_SERVICE);
+        try {
+            for (String cameraId : manager.getCameraIdList()) {
+                CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
+
+                Integer lensFacing = characteristics.get(CameraCharacteristics.LENS_FACING);
+                if (lensFacing != null && lensFacing == CameraCharacteristics.LENS_FACING_BACK) {
+                    Range<Integer>[] availableFpsRanges = characteristics.get(
+                            CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES);
+
+                    if (availableFpsRanges != null) {
+                        for (Range<Integer> range : availableFpsRanges) {
+                            if (highestFpsRange == null ||
+                                    range.getUpper() > highestFpsRange.getUpper() ||
+                                    (range.getUpper().equals(highestFpsRange.getUpper()) && range.getLower() > highestFpsRange.getLower())) {
+                                highestFpsRange = range;
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
+
+        Log.w(getPluginName(), String.format("Starting camera with FPS range: %s", String.valueOf(highestFpsRange)));
+
         Preview preview = new Preview.Builder()
                 .build();
         CameraSelector cameraSelector = new CameraSelector.Builder()
@@ -109,32 +162,47 @@ public class GodotAndroidPlugin extends GodotPlugin {
                 new Camera2Interop.Extender<>(imageAnalysisBuilder);
         ext.setCaptureRequestOption(
                 CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE,
-                new Range<>(60, 60)
+                highestFpsRange
         );
 
         ResolutionSelector resolutionSelector = new ResolutionSelector.Builder()
                 .setResolutionStrategy(
                         new ResolutionStrategy(
-                                new Size(128, 128),
+                                new Size(width, height),
                                 ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER))
                 .build();
 
         ImageAnalysis imageAnalysis = imageAnalysisBuilder
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_BLOCK_PRODUCER)
                 .setResolutionSelector(resolutionSelector)
                 .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                 .build();
         imageAnalysis.setAnalyzer(executor, image -> {
-            long timestamp = System.currentTimeMillis();
-            if (image.getFormat() == PixelFormat.RGBA_8888) {
-                ByteBuffer buffer = image.getImage().getPlanes()[0].getBuffer();
-                byte[] rgbData = new byte[buffer.remaining()];
-                buffer.get(rgbData);
-                emitSignal("on_camera_frame", timestamp, rgbData, image.getWidth(), image.getHeight());
+            try {
+                if (image.getFormat() == PixelFormat.RGBA_8888) {
+                    ByteBuffer buffer = image.getImage().getPlanes()[0].getBuffer();
+                    byte[] rgbData = new byte[buffer.remaining()];
+                    buffer.get(rgbData);
+                    long timestamp = System.currentTimeMillis();
+
+                    // Prevent blocking the main thread while sending camera data to Godot
+                    new Thread(() -> {
+                        emitSignal("on_camera_frame", timestamp, rgbData, image.getWidth(), image.getHeight());
+                    }).start();
+                }
+            } catch (Exception e) {
+                Log.e("ImageAnalyzer", "Analyzer exception", e);
+            } finally {
+                image.close();
             }
-            image.close();
         });
         cameraProvider.unbindAll();
-        Camera camera = cameraProvider.bindToLifecycle((LifecycleOwner) activity, cameraSelector, imageAnalysis);
+
+        camera = cameraProvider.bindToLifecycle((LifecycleOwner) activity, cameraSelector, imageAnalysis);
+
+        if (flash_on) {
+            camera.getCameraControl().enableTorch(true);
+        }
     }
 
     @UsedByGodot

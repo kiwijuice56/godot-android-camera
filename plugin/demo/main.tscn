@@ -10,52 +10,60 @@ script = ExtResource("1_ig7tw")
 
 [node name="CanvasLayer" type="CanvasLayer" parent="."]
 
-[node name="Canvas" type="TextureRect" parent="CanvasLayer"]
-unique_name_in_owner = true
-texture_filter = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-grow_horizontal = 2
-grow_vertical = 2
-
-[node name="MarginContainer" type="MarginContainer" parent="CanvasLayer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="CanvasLayer"]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+
+[node name="Canvas" type="TextureRect" parent="CanvasLayer/VBoxContainer"]
+unique_name_in_owner = true
+texture_filter = 1
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="MarginContainer" type="MarginContainer" parent="CanvasLayer/VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
 theme = SubResource("Theme_ig7tw")
 theme_override_constants/margin_left = 32
 theme_override_constants/margin_top = 32
 theme_override_constants/margin_right = 32
 theme_override_constants/margin_bottom = 32
 
-[node name="VBoxContainer" type="VBoxContainer" parent="CanvasLayer/MarginContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="CanvasLayer/VBoxContainer/MarginContainer"]
 layout_mode = 2
 theme_override_constants/separation = 16
 
-[node name="Label" type="RichTextLabel" parent="CanvasLayer/MarginContainer/VBoxContainer"]
+[node name="Label" type="RichTextLabel" parent="CanvasLayer/VBoxContainer/MarginContainer/VBoxContainer"]
 layout_mode = 2
 text = "This is a test app for the GodotAndroidPlugin app. 
 
 Use a remote deploy export to test features of this plugin."
 fit_content = true
 
-[node name="CheckCameraPermissionsButton" type="Button" parent="CanvasLayer/MarginContainer/VBoxContainer"]
+[node name="CheckCameraPermissionsButton" type="Button" parent="CanvasLayer/VBoxContainer/MarginContainer/VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
-size_flags_vertical = 10
+size_flags_vertical = 3
 text = "Check/Request Camera Permissions"
 
-[node name="StartCapturingButton" type="Button" parent="CanvasLayer/MarginContainer/VBoxContainer"]
+[node name="StartCapturingButton" type="Button" parent="CanvasLayer/VBoxContainer/MarginContainer/VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_vertical = 3
 text = "Start Capturing Camera Frames"
 
-[node name="StopCapturingButton" type="Button" parent="CanvasLayer/MarginContainer/VBoxContainer"]
+[node name="StopCapturingButton" type="Button" parent="CanvasLayer/VBoxContainer/MarginContainer/VBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2
+size_flags_vertical = 3
 text = "Stop Capturing Camera Frames"
+
+[node name="CanvasEnabled" type="Button" parent="CanvasLayer/VBoxContainer/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 3
+toggle_mode = true
+text = "Canvas Toggle"

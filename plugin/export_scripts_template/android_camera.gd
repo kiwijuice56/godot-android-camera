@@ -4,7 +4,7 @@ const _plugin_name: String = "GodotAndroidCamera"
 
 var java_interface: JNISingleton
 
-signal camera_frame(timestamp: int, image_texture: ImageTexture)
+signal camera_frame(timestamp: int, data: PackedByteArray, width: int, height: int)
 
 func _initialize_java_interface() -> void:
 	assert(Engine.has_singleton(_plugin_name))
@@ -15,9 +15,12 @@ func _initialize_java_interface() -> void:
 func _on_camera_frame(timestamp: int, data: PackedByteArray, width: int, height: int) -> void:
 	if not is_instance_valid(java_interface):
 		_initialize_java_interface()
+	camera_frame.emit(timestamp, data, width, height)
 
-	var image: Image = Image.create_from_data(width, height, false, Image.FORMAT_RGBA8, data,)
-	camera_frame.emit(timestamp, ImageTexture.create_from_image(image))
+## Converts raw data from a frame into an ImageTexture
+static func raw_data_to_image(data: PackedByteArray, width: int, height: int) -> ImageTexture:
+	var image: Image = Image.create_from_data(width, height, false, Image.FORMAT_RGBA8, data)
+	return ImageTexture.create_from_image(image)
 
 ## Shows camera permissions pop-up. Required for other camera functions to work.
 ## Returns true if permissions accepted, false otherwise.
@@ -35,7 +38,7 @@ func start_camera(desired_width: int, desired_height: int, flash_on: bool) -> vo
 	if not is_instance_valid(java_interface):
 		_initialize_java_interface()
 
-	java_interface.startCamera()
+	java_interface.startCamera(desired_width, desired_height, flash_on)
 
 ## Stops camera streaming.
 func stop_camera() -> void:

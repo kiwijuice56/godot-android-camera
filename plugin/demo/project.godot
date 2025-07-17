@@ -15,6 +15,10 @@ run/main_scene="uid://coun7joy8o2i2"
 config/features=PackedStringArray("4.4", "Mobile")
 config/icon="res://icon.svg"
 
+[debug]
+
+settings/stdout/print_fps=true
+
 [display]
 
 window/size/viewport_width=1080

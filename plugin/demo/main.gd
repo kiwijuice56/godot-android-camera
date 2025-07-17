@@ -12,14 +12,15 @@ func _ready() -> void:
 	%StartCapturingButton.pressed.connect(_on_start_capturing_pressed)
 	%StopCapturingButton.pressed.connect(_on_stop_capturing_pressed)
 
-func _on_camera_frame(image_texture: ImageTexture) -> void:
-	%Canvas.texture = image_texture
+func _on_camera_frame(_timestamp: int, data: PackedByteArray, width: int, height: int) -> void:
+	if %CanvasEnabled.button_pressed:
+		%Canvas.texture = AndroidCamera.raw_data_to_image(data, width, height)
 
 func _on_check_camera_permissions() -> void:
 	android_camera.request_camera_permissions()
 
 func _on_start_capturing_pressed() -> void:
-	android_camera.start_camera(1024, 1024, 50, false)
+	android_camera.start_camera(512, 512, false)
 
 func _on_stop_capturing_pressed() -> void:
-	android_camera.stop_camera()
+	android_camera.stop_camera.call_deferred()
