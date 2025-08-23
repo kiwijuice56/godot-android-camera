@@ -44,6 +44,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
 /** @noinspection ALL*/
+@SuppressWarnings("UnsafeOptInUsageError")
 public class GodotAndroidPlugin extends GodotPlugin {
     // Recording parameters
     private int width;
