@@ -9,7 +9,6 @@ import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CaptureRequest;
-import android.media.Image;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -48,7 +47,9 @@ public class GodotAndroidPlugin extends GodotPlugin {
     // Recording parameters
     private int width;
     private int height;
-    private boolean flash_on;
+    private boolean flashOn;
+    private int samplingFrequencyUpper;
+    private int samplingFrequencyLower;
 
     private int REQUEST_CODE_PERMISSIONS = 1001;
 
@@ -86,7 +87,7 @@ public class GodotAndroidPlugin extends GodotPlugin {
 
         this.width = recordingWidth;
         this.height = recordingHeight;
-        this.flash_on = flash_on;
+        this.flashOn = flash_on;
 
         final ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(activity);
         cameraProviderFuture.addListener(new Runnable() {
@@ -112,7 +113,7 @@ public class GodotAndroidPlugin extends GodotPlugin {
 
         new Handler(Looper.getMainLooper()).post(() -> {
             if (cameraProvider != null) {
-                if (flash_on && camera != null) {
+                if (flashOn && camera != null) {
                     camera.getCameraControl().enableTorch(false);
                 }
                 cameraProvider.unbindAll();
@@ -158,6 +159,8 @@ public class GodotAndroidPlugin extends GodotPlugin {
                 .build();
         ImageAnalysis.Builder imageAnalysisBuilder = new ImageAnalysis.Builder();
 
+        samplingFrequencyUpper = highestFpsRange.getUpper();
+        samplingFrequencyLower = highestFpsRange.getLower();
         Camera2Interop.Extender<ImageAnalysis> ext =
                 new Camera2Interop.Extender<>(imageAnalysisBuilder);
         ext.setCaptureRequestOption(
@@ -200,9 +203,14 @@ public class GodotAndroidPlugin extends GodotPlugin {
 
         camera = cameraProvider.bindToLifecycle((LifecycleOwner) activity, cameraSelector, imageAnalysis);
 
-        if (flash_on) {
+        if (flashOn) {
             camera.getCameraControl().enableTorch(true);
         }
+    }
+
+    @UsedByGodot
+    public int[] getSamplingFrequencyRange() {
+        return new int[] { samplingFrequencyLower, samplingFrequencyUpper };
     }
 
     @UsedByGodot

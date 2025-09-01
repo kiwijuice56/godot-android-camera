@@ -46,3 +46,8 @@ func stop_camera() -> void:
 		_initialize_java_interface()
 
 	java_interface.stopCamera()
+
+# Returns an array of the sampling frequency range in the format [lower, upper] Hz.
+# For most phones, this should be [60, 60] or [30, 60].
+func get_sampling_frequency_range() -> PackedInt32Array:
+    return java_interface.getSamplingFrequencyRange()
